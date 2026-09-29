@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: mechanic
+      POSTGRES_USER: mechanic
+      POSTGRES_PASSWORD: mechanic
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mechanic -d mechanic"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      SERVER_PORT: 8080
+      DATABASE_URL: jdbc:postgresql://postgres:5432/mechanic
+      DATABASE_USER: mechanic
+      DATABASE_PASSWORD: mechanic
+      JWT_SECRET: replace-this-dev-secret-with-a-long-random-value
+      JWT_ISSUER: mechanic-backend
+      JWT_AUDIENCE: mechanic-android
+      JWT_TTL_SECONDS: 28800
+      STORAGE_PATH: /app/storage
+      ONEC_MODE: DEMO
+      ONEC_BASE_URL: http://onec:8081/hs/mechanic/v1
+      SYNC_INTERVAL_MS: 5000
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  backend_storage:

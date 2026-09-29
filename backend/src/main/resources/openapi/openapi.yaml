@@ -1,0 +1,397 @@
+openapi: 3.0.3
+info:
+  title: Mobile Mechanic Workplace API
+  version: 1.0.0
+  description: |
+    Stable API between the Android mechanic application and the integration backend.
+    The API deliberately does not expose 1C/Alfa-Auto metadata. 1C integration is an internal adapter.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Liveness probe
+      responses:
+        '200':
+          description: OK
+  /ready:
+    get:
+      security: []
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Ready
+  /api/v1/auth/login:
+    post:
+      security: []
+      summary: Authenticate mechanic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: JWT access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/me:
+    get:
+      summary: Current user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /api/v1/work-orders:
+    get:
+      summary: Current and upcoming work orders assigned to the authenticated mechanic
+      responses:
+        '200':
+          description: Work order list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkOrderList'
+  /api/v1/work-orders/{id}:
+    get:
+      summary: Work order details
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200':
+          description: Work order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkOrderDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/work-orders/{workOrderId}/operations/{operationId}/start:
+    post:
+      summary: Start work
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderIdPath'
+        - $ref: '#/components/parameters/OperationIdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Operation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartOperationResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/work-orders/{workOrderId}/operations/{operationId}/complete:
+    post:
+      summary: Complete work
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderIdPath'
+        - $ref: '#/components/parameters/OperationIdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteOperationRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteOperationResponse'
+  /api/v1/work-orders/{workOrderId}/issues:
+    post:
+      summary: Register an issue or additional work
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderIdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIssueRequest'
+      responses:
+        '200':
+          description: Issue registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateIssueResponse'
+  /api/v1/work-orders/{workOrderId}/attachments:
+    post:
+      summary: Attach a photo
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderIdPath'
+        - $ref: '#/components/parameters/OperationIdQuery'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Attachment stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUploadResponse'
+        '413':
+          description: File too large
+  /api/v1/attachments/{id}/file:
+    get:
+      summary: Download an attached photo
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200':
+          description: Binary image
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+  /api/v1/sync/status:
+    get:
+      summary: Outbox synchronization status
+      responses:
+        '200':
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UuidPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkOrderIdPath:
+      name: workOrderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OperationIdPath:
+      name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        maxLength: 200
+    OperationIdQuery:
+      name: operationId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string, nullable: true }
+        details:
+          type: object
+          additionalProperties: { type: string }
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login: { type: string }
+        password: { type: string, format: password }
+    User:
+      type: object
+      required: [id, name, role, oneCEmployeeId]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        oneCEmployeeId: { type: string }
+    TokenResponse:
+      type: object
+      required: [accessToken, expiresInSeconds, user]
+      properties:
+        accessToken: { type: string }
+        expiresInSeconds: { type: integer, format: int64 }
+        user: { $ref: '#/components/schemas/User' }
+    Vehicle:
+      type: object
+      required: [id, vin, brand, model, mileage]
+      properties:
+        id: { type: string }
+        vin: { type: string }
+        brand: { type: string }
+        model: { type: string }
+        year: { type: integer, nullable: true }
+        mileage: { type: integer }
+    Operation:
+      type: object
+      required: [id, name, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [ASSIGNED, IN_PROGRESS, COMPLETED] }
+        startedAt: { type: string, nullable: true }
+        completedAt: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+    Issue:
+      type: object
+      required: [id, description, additionalWorkRequired, createdAt]
+      properties:
+        id: { type: string }
+        description: { type: string }
+        additionalWorkRequired: { type: boolean }
+        operationId: { type: string, nullable: true }
+        createdAt: { type: string }
+    Attachment:
+      type: object
+      required: [id, originalName, contentType, sizeBytes, syncStatus, createdAt, downloadUrl]
+      properties:
+        id: { type: string }
+        originalName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        syncStatus: { type: string, enum: [PENDING, SENT, FAILED] }
+        createdAt: { type: string }
+        downloadUrl: { type: string }
+    WorkOrderSummary:
+      type: object
+      required: [id, number, status, scheduledAt, vehicle]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        status: { type: string }
+        scheduledAt: { type: string }
+        vehicle: { $ref: '#/components/schemas/Vehicle' }
+    WorkOrderList:
+      type: object
+      required: [upcoming]
+      properties:
+        current: { $ref: '#/components/schemas/WorkOrderSummary', nullable: true }
+        upcoming:
+          type: array
+          items: { $ref: '#/components/schemas/WorkOrderSummary' }
+    WorkOrderDetails:
+      type: object
+      required: [id, number, status, scheduledAt, vehicle, customerName, operations, issues, attachments]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        status: { type: string }
+        scheduledAt: { type: string }
+        vehicle: { $ref: '#/components/schemas/Vehicle' }
+        customerName: { type: string }
+        complaint: { type: string, nullable: true }
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/Operation' }
+        issues:
+          type: array
+          items: { $ref: '#/components/schemas/Issue' }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/Attachment' }
+    CompleteOperationRequest:
+      type: object
+      properties:
+        description: { type: string, nullable: true }
+    StartOperationResponse:
+      type: object
+      required: [operation, syncStatus]
+      properties:
+        operation: { $ref: '#/components/schemas/Operation' }
+        syncStatus: { type: string }
+    CompleteOperationResponse:
+      type: object
+      required: [operation, syncStatus]
+      properties:
+        operation: { $ref: '#/components/schemas/Operation' }
+        syncStatus: { type: string }
+    CreateIssueRequest:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string }
+        additionalWorkRequired: { type: boolean, default: false }
+        operationId: { type: string, nullable: true }
+    CreateIssueResponse:
+      type: object
+      required: [issue, syncStatus]
+      properties:
+        issue: { $ref: '#/components/schemas/Issue' }
+        syncStatus: { type: string }
+    AttachmentUploadResponse:
+      type: object
+      required: [attachment, syncStatus]
+      properties:
+        attachment: { $ref: '#/components/schemas/Attachment' }
+        syncStatus: { type: string }
+    SyncStatus:
+      type: object
+      required: [pending, processing, failed, sent]
+      properties:
+        pending: { type: integer }
+        processing: { type: integer }
+        failed: { type: integer }
+        sent: { type: integer }
