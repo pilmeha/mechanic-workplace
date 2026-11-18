@@ -20,6 +20,16 @@ class ApiException(
     message: String
 ) : Exception(message)
 
+/**
+ * Legacy client for the old Ktor backend (`/api/v1`, JWT, multipart, Idempotency-Key).
+ *
+ * Kept for reference only. The new flow uses OneCMobileApiClient with Basic auth and
+ * `POST /auth/login` without a body.
+ */
+@Deprecated(
+    message = "legacy /api/v1 JWT backend; use OneCMobileApiClient",
+    level = DeprecationLevel.WARNING
+)
 class ApiClient(private val sessionStore: SessionStore) {
     private val json = Json {
         ignoreUnknownKeys = true

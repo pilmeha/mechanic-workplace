@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.map
 
 private val Context.sessionDataStore by preferencesDataStore(name = "session")
 
+@Deprecated(
+    message = "legacy JWT session; the 1C contract uses Basic auth via CredentialsStore",
+    level = DeprecationLevel.WARNING
+)
 class SessionStore(private val context: Context) {
     private object Keys {
         val token = stringPreferencesKey("token")
